@@ -1,0 +1,39 @@
+//文件开头配置
+apply plugin: 'com.android.library'
+
+android {
+    compileSdkVersion 26
+
+    resourcePrefix "toast_"
+
+    defaultConfig {
+        minSdkVersion 3
+        targetSdkVersion 26
+        versionCode 80
+        versionName "8.0"
+
+    }
+}
+
+
+
+
+task sourcesJar(type: Jar) {
+    from android.sourceSets.main.java.srcDirs
+    classifier = 'sources'
+}
+
+task javadoc(type: Javadoc) {
+    source = android.sourceSets.main.java.srcDirs
+    classpath += project.files(android.getBootClasspath().join(File.pathSeparator))
+}
+
+task javadocJar(type: Jar, dependsOn: javadoc) {
+    classifier = 'javadoc'
+    from javadoc.destinationDir
+}
+
+artifacts {
+    archives javadocJar
+    archives sourcesJar
+}

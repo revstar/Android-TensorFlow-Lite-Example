@@ -1,5 +1,7 @@
 package com.amitshekhar.tflite.model;
 
+import java.util.List;
+
 /**
  * Create on 2020-02-04 17:49
  * author revstar
@@ -8,11 +10,11 @@ package com.amitshekhar.tflite.model;
 public class TypePictureBean {
 
     private String type;
-    private String picturePath;
+    private List<String> picturePaths;
 
-    public TypePictureBean(String type, String picturePath) {
+    public TypePictureBean(String type, List<String> picturePaths) {
         this.type = type;
-        this.picturePath = picturePath;
+        this.picturePaths = picturePaths;
     }
 
     public String getType() {
@@ -23,12 +25,11 @@ public class TypePictureBean {
         this.type = type;
     }
 
-    public String getPicturePath() {
-        return picturePath;
+    public List<String> getPicturePaths() {
+        return picturePaths;
     }
 
-    public void setPicturePath(String picturePath) {
-        this.picturePath = picturePath;
+    public void setPicturePaths(List<String> picturePaths) {
+        this.picturePaths = picturePaths;
     }
-
 }

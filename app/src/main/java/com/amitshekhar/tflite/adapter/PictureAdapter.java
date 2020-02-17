@@ -2,6 +2,9 @@ package com.amitshekhar.tflite.adapter;
 
 import android.widget.ImageView;
 
+import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+
 import com.amitshekhar.tflite.R;
 import com.amitshekhar.tflite.model.TypePictureBean;
 import com.bumptech.glide.Glide;
@@ -25,9 +28,12 @@ public class PictureAdapter extends BaseQuickAdapter<TypePictureBean, BaseViewHo
 
     @Override
     protected void convert(BaseViewHolder holder, TypePictureBean typePictureBean) {
+
         if (typePictureBean!=null){
             holder.setText(R.id.tv_type,typePictureBean.getType());
-            Glide.with(getContext()).load(typePictureBean.getPicturePath()).into((ImageView) holder.getView(R.id.ig_picture));
+            RecyclerView rvType=holder.getView(R.id.rv_type);
+            rvType.setLayoutManager(new GridLayoutManager(getContext(),3,RecyclerView.VERTICAL,false));
+            rvType.setAdapter(new TypeAdapter(R.layout.type_item,typePictureBean.getPicturePaths()));
         }
     }
 }

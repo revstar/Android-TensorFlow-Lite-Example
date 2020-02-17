@@ -1,4 +1,4 @@
-package com.amitshekhar.tflite;
+package com.amitshekhar.tflite.activity;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
@@ -7,25 +7,32 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Message;
 import android.provider.MediaStore;
 import android.os.Bundle;
 import android.util.Log;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.amitshekhar.tflite.Classifier;
+import com.amitshekhar.tflite.R;
+import com.amitshekhar.tflite.TFLiteObjectDetectionAPIModel;
 import com.amitshekhar.tflite.adapter.PictureAdapter;
 import com.amitshekhar.tflite.model.MediaBean;
 import com.amitshekhar.tflite.model.TypePictureBean;
+import com.amitshekhar.tflite.utils.DialogUtils;
+import com.revstar.dialog.ToastDialog;
 
-import org.tensorflow.lite.Tensor;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -43,14 +50,44 @@ public class AlbumActivity extends AppCompatActivity {
     private List<TypePictureBean> mTypePictureBeanList;
     private RecyclerView rvPicture;
 
-    Bitmap original ;
-    Bitmap bitmap ;
+    Bitmap original;
+    Bitmap bitmap;
+    private DialogUtils mDialogUtils;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_album);
         initView();
+        initPictureList();
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
         getPermission();
+    }
+
+    private void initPictureList() {
+
+        if (mTypePictureBeanList == null) {
+            mTypePictureBeanList = new ArrayList<>();
+        }
+        mTypePictureBeanList.add(new TypePictureBean("background", new ArrayList<>()));
+        mTypePictureBeanList.add(new TypePictureBean("bag", new ArrayList<>()));
+        mTypePictureBeanList.add(new TypePictureBean("belt", new ArrayList<>()));
+        mTypePictureBeanList.add(new TypePictureBean("boots", new ArrayList<>()));
+        mTypePictureBeanList.add(new TypePictureBean("footwear", new ArrayList<>()));
+        mTypePictureBeanList.add(new TypePictureBean("outer", new ArrayList<>()));
+        mTypePictureBeanList.add(new TypePictureBean("dress", new ArrayList<>()));
+        mTypePictureBeanList.add(new TypePictureBean("sunglasses", new ArrayList<>()));
+        mTypePictureBeanList.add(new TypePictureBean("pants", new ArrayList<>()));
+        mTypePictureBeanList.add(new TypePictureBean("top", new ArrayList<>()));
+        mTypePictureBeanList.add(new TypePictureBean("shorts", new ArrayList<>()));
+        mTypePictureBeanList.add(new TypePictureBean("skirt", new ArrayList<>()));
+        mTypePictureBeanList.add(new TypePictureBean("headwear", new ArrayList<>()));
+        mTypePictureBeanList.add(new TypePictureBean("scarf_and_tie", new ArrayList<>()));
+
     }
 
     private void initView() {
@@ -95,9 +132,17 @@ public class AlbumActivity extends AppCompatActivity {
      * 读取手机中所有图片信息
      */
     private void getAllPhotoInfo() {
+
         new Thread(new Runnable() {
             @Override
             public void run() {
+
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        getDialogUtils().showDialog(DialogUtils.Type.LOADING, "正在导入中...", true);
+                    }
+                });
                 final List<MediaBean> mediaBeen = new ArrayList<>();
                 HashMap<String, List<MediaBean>> allPhotosTemp = new HashMap<>();//所有照片
                 Uri mImageUri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
@@ -124,7 +169,9 @@ public class AlbumActivity extends AppCompatActivity {
                         //存储对应关系
                         if (allPhotosTemp.containsKey(dirPath)) {
                             List<MediaBean> data = allPhotosTemp.get(dirPath);
-                            data.add(new MediaBean(path, size, displayName));
+                            if (data!=null){
+                                data.add(new MediaBean(path, size, displayName));
+                            }
                             continue;
                         } else {
                             List<MediaBean> data = new ArrayList<>();
@@ -134,12 +181,12 @@ public class AlbumActivity extends AppCompatActivity {
                     }
                     mCursor.close();
                 }
+                queryType(mediaBeen);
                 //更新界面
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
                         //...
-                        queryType(mediaBeen);
                         setRvPicture();
                     }
                 });
@@ -159,6 +206,7 @@ public class AlbumActivity extends AppCompatActivity {
                             INPUT_SIZE,
                             QUANT);
                 } catch (final Exception e) {
+                    getDialogUtils().showDialog(DialogUtils.Type.ERROR, e.getMessage(), true);
                     throw new RuntimeException("Error initializing TensorFlow!", e);
                 }
             }
@@ -166,7 +214,7 @@ public class AlbumActivity extends AppCompatActivity {
         if (mediaBeanList != null) {
             for (MediaBean item : mediaBeanList) {
                 if (item != null && item.getLocalPath() != null) {
-                    getClassName(item.getLocalPath());
+                    getPictureType(item.getLocalPath());
                 }
             }
         }
@@ -176,30 +224,59 @@ public class AlbumActivity extends AppCompatActivity {
 
     private void setRvPicture() {
         if (rvPicture != null && mTypePictureBeanList != null) {
-            rvPicture.setLayoutManager(new GridLayoutManager(this, 3, RecyclerView.VERTICAL, false));
+            getDialogUtils().showDialog(DialogUtils.Type.FINISH, "导入成功", true);
+            removeEmptyPicture();
+            rvPicture.setLayoutManager(new LinearLayoutManager(this));
             PictureAdapter adapter = new PictureAdapter(R.layout.picture_item, mTypePictureBeanList);
             rvPicture.setAdapter(adapter);
         }
     }
 
-    private void getClassName(String picturePath) {
-
-
-         original = BitmapFactory.decodeFile(picturePath);
-         bitmap = Bitmap.createScaledBitmap(original, INPUT_SIZE, INPUT_SIZE, false);
-
-        if (bitmap != null && classifier != null) {
-            final List<Classifier.Recognition> results = classifier.recognizeImage(bitmap);
-            if (mTypePictureBeanList == null) {
-                mTypePictureBeanList = new ArrayList<>();
+    private void removeEmptyPicture() {
+        for (int i = mTypePictureBeanList.size() - 1; i >= 0; i--) {
+            if (mTypePictureBeanList.get(i) != null && (mTypePictureBeanList.get(i).getPicturePaths() == null
+                    || mTypePictureBeanList.get(i).getPicturePaths().size() == 0)) {
+                mTypePictureBeanList.remove(i);
             }
+        }
+    }
 
-            if (results != null && results.get(0) != null && results.get(0).getTitle() != null) {
+    private void getPictureType(String picturePath) {
 
-                mTypePictureBeanList.add(new TypePictureBean(results.get(0).getTitle(), picturePath));
+
+        original = BitmapFactory.decodeFile(picturePath);
+        if (original!=null){
+            bitmap = Bitmap.createScaledBitmap(original, INPUT_SIZE, INPUT_SIZE, false);
+
+            if (bitmap != null && classifier != null) {
+                final List<Classifier.Recognition> results = classifier.recognizeImage(bitmap);
+                if (mTypePictureBeanList == null) {
+                    mTypePictureBeanList = new ArrayList<>();
+                }
+
+                if (results != null && results.get(0) != null) {
+                    String title = results.get(0).getTitle();
+                    if (title != null) {
+                        addPictureToList(title, picturePath);
+                    }
+                }
             }
         }
 
+    }
+
+    private void addPictureToList(String title, String picturePath) {
+        try {
+            for (int i = 0; i < mTypePictureBeanList.size(); i++) {
+                if (mTypePictureBeanList.get(i).getType().equals(title)) {
+                    mTypePictureBeanList.get(i).getPicturePaths().add(picturePath);
+                }
+            }
+
+        } catch (Exception e) {
+            getDialogUtils().showDialog(DialogUtils.Type.ERROR, e.getMessage(), true);
+            e.printStackTrace();
+        }
     }
 
     @Override
@@ -214,5 +291,12 @@ public class AlbumActivity extends AppCompatActivity {
             });
         }
 
+    }
+
+    public DialogUtils getDialogUtils() {
+        if (mDialogUtils == null) {
+            mDialogUtils = new DialogUtils(this);
+        }
+        return mDialogUtils;
     }
 }

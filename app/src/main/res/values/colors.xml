@@ -3,4 +3,8 @@
     <color name="colorPrimary">#33aaff</color>
     <color name="colorPrimaryDark">#33aaff</color>
     <color name="colorAccent">#33aaff</color>
+    <color name="import_color">#B37DA2F3</color>
+    <color name="white">#FFFFFF</color>
+    <color name="import_progress_color">#86A2E0</color>
+
 </resources>

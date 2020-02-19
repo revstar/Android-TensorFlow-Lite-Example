@@ -5,10 +5,12 @@ import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Message;
+import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.os.Bundle;
 import android.util.Log;
@@ -30,11 +32,16 @@ import com.amitshekhar.tflite.TFLiteObjectDetectionAPIModel;
 import com.amitshekhar.tflite.adapter.PictureAdapter;
 import com.amitshekhar.tflite.model.MediaBean;
 import com.amitshekhar.tflite.model.TypePictureBean;
+import com.amitshekhar.tflite.progressdialog.MProgressBarDialog;
+import com.amitshekhar.tflite.utils.BitmapUtils;
 import com.amitshekhar.tflite.utils.DialogUtils;
+import com.amitshekhar.tflite.utils.DisplayUtils;
+import com.amitshekhar.tflite.utils.MyUtils;
 import com.revstar.dialog.ToastDialog;
 
 
 import java.io.File;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -56,11 +63,15 @@ public class AlbumActivity extends AppCompatActivity {
     Bitmap bitmap;
     private DialogUtils mDialogUtils;
 
+    private MProgressBarDialog mProgressBarDialog;
+    private List<MediaBean> mediaBeen;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_album);
         initView();
+        initProgressBar();
         initPictureList();
     }
 
@@ -92,6 +103,31 @@ public class AlbumActivity extends AppCompatActivity {
 
     }
 
+    private void initProgressBar() {
+        mProgressBarDialog = new MProgressBarDialog.Builder(this)
+                .setStyle(MProgressBarDialog.MProgressBarDialogStyle_Horizontal)
+                //全屏背景窗体的颜色
+                .setBackgroundWindowColor(MyUtils.getMyColor(this, R.color.picture_color_4d))
+                //View背景的颜色
+                .setBackgroundViewColor(MyUtils.getMyColor(this, R.color.import_color))
+                //字体的颜色
+                .setTextColor(MyUtils.getMyColor(this, R.color.white))
+                //View边框的颜色
+                .setStrokeColor(MyUtils.getMyColor(this, R.color.white))
+                //View边框的宽度
+                .setStrokeWidth(0)
+                //ProgressBar背景色
+                .setProgressbarBackgroundColor(MyUtils.getMyColor(this, R.color.import_progress_color))
+                //ProgressBar 颜色
+                .setProgressColor(Color.WHITE)
+                //水平进度条Progress圆角
+                .setProgressCornerRadius(DisplayUtils.dp2px(this, 3))
+                //水平进度条的高度
+                .setHorizontalProgressBarHeight(10)
+                //dialog动画
+                .build();
+    }
+
     private void initView() {
         rvPicture = findViewById(R.id.rv_picture);
         final Toolbar toolbar = findViewById(R.id.toolbar);
@@ -102,6 +138,60 @@ public class AlbumActivity extends AppCompatActivity {
             }
         });
     }
+
+    private static class MyHandler extends Handler {
+        private final WeakReference<AlbumActivity> mActivity;
+
+        public MyHandler(AlbumActivity activity) {
+            this.mActivity = new WeakReference<AlbumActivity>(activity);
+        }
+
+        @Override
+        public void handleMessage(Message msg) {
+            super.handleMessage(msg);
+            AlbumActivity activity = mActivity.get();
+            if (activity != null&&activity.mediaBeen!=null) {
+                if (activity.mProgressBarDialog != null) {
+                    activity.mProgressBarDialog.showProgress(100*msg.arg1/activity.mediaBeen.size(), (msg.arg1+1) + "/" + activity.mediaBeen.size(), true);
+                    if (msg.arg1+1 == activity.mediaBeen.size()) {
+                        activity.mProgressBarDialog.setTvImportState("完成");
+                        activity.mHandler.postDelayed(new Runnable() {
+                            @Override
+                            public void run() {
+                                activity.mProgressBarDialog.dismiss();
+                                activity.isShowProgress(false);
+                                activity.mHandler.removeCallbacksAndMessages(null);
+                            }
+                        }, 500);
+                    }
+                }
+            }
+        }
+    }
+
+
+
+    private final MyHandler mHandler = new MyHandler(this);
+
+
+
+    /**
+     * @param isShow true 显示加载 fale 隐藏加载
+     */
+    public void isShowProgress(boolean isShow) {
+
+        if (isShow) {
+            if (mProgressBarDialog != null && !mProgressBarDialog.isShowing()) {
+                mProgressBarDialog.dismiss();
+            }
+        } else {
+            if (mProgressBarDialog != null && mProgressBarDialog.isShowing()) {
+                mProgressBarDialog.dismiss();
+
+            }
+        }
+    }
+
 
     private void getPermission() {
 
@@ -149,10 +239,10 @@ public class AlbumActivity extends AppCompatActivity {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        getDialogUtils().showDialog(DialogUtils.Type.LOADING, "正在导入中...", true);
+//                        getDialogUtils().showDialog(DialogUtils.Type.LOADING, "正在导入中...", true);
                     }
                 });
-                final List<MediaBean> mediaBeen = new ArrayList<>();
+                 mediaBeen = new ArrayList<>();
                 HashMap<String, List<MediaBean>> allPhotosTemp = new HashMap<>();//所有照片
                 Uri mImageUri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
                 String[] projImage = {MediaStore.Images.Media._ID
@@ -215,16 +305,25 @@ public class AlbumActivity extends AppCompatActivity {
                             INPUT_SIZE,
                             QUANT);
                 } catch (final Exception e) {
+                    isShowProgress(false);
                     getDialogUtils().showDialog(DialogUtils.Type.ERROR, e.getMessage(), true);
                     throw new RuntimeException("Error initializing TensorFlow!", e);
                 }
             }
         });
         if (mediaBeanList != null) {
-            for (MediaBean item : mediaBeanList) {
+            float lastTime= SystemClock.uptimeMillis();
+            for (int i=0;i<mediaBeanList.size();i++){
+                MediaBean item=mediaBeanList.get(i);
+                float currentTime=SystemClock.uptimeMillis();
+                Log.d("第"+i+"个",(currentTime-lastTime)+"毫秒");
+                lastTime=currentTime;
                 if (item != null && item.getLocalPath() != null) {
                     getPictureType(item.getLocalPath());
                 }
+                Message message=mHandler.obtainMessage();
+                message.arg1=i;
+                mHandler.sendMessage(message);
             }
         }
 
@@ -233,7 +332,7 @@ public class AlbumActivity extends AppCompatActivity {
 
     private void setRvPicture() {
         if (rvPicture != null && mTypePictureBeanList != null) {
-            getDialogUtils().showDialog(DialogUtils.Type.FINISH, "导入成功", true);
+//            getDialogUtils().showDialog(DialogUtils.Type.FINISH, "导入成功", true);
             removeEmptyPicture();
             rvPicture.setLayoutManager(new LinearLayoutManager(this));
             PictureAdapter adapter = new PictureAdapter(R.layout.picture_item, mTypePictureBeanList);
@@ -253,9 +352,11 @@ public class AlbumActivity extends AppCompatActivity {
     private void getPictureType(String picturePath) {
 
 
-        original = BitmapFactory.decodeFile(picturePath);
-        if (original!=null){
-            bitmap = Bitmap.createScaledBitmap(original, INPUT_SIZE, INPUT_SIZE, false);
+        try {
+
+//        original = BitmapFactory.decodeFile(picturePath);
+//        if (original!=null){
+            bitmap = Bitmap.createScaledBitmap(BitmapFactory.decodeFile(picturePath), INPUT_SIZE, INPUT_SIZE, false);
 
             if (bitmap != null && classifier != null) {
                 final List<Classifier.Recognition> results = classifier.recognizeImage(bitmap);
@@ -264,12 +365,19 @@ public class AlbumActivity extends AppCompatActivity {
                 }
 
                 if (results != null && results.get(0) != null) {
-                    String title = results.get(0).getTitle();
-                    if (title != null) {
-                        addPictureToList(title, picturePath);
+                    Classifier.Recognition item=results.get(0);
+                    if (item.getConfidence()>0.5){
+                        String title = item.getTitle();
+                        if (title != null) {
+                            addPictureToList(title, picturePath);
+                        }
                     }
+
                 }
             }
+//        }
+        }catch (Exception e){
+            e.printStackTrace();
         }
 
     }
@@ -283,10 +391,13 @@ public class AlbumActivity extends AppCompatActivity {
             }
 
         } catch (Exception e) {
+
+            isShowProgress(false);
             getDialogUtils().showDialog(DialogUtils.Type.ERROR, e.getMessage(), true);
             e.printStackTrace();
         }
     }
+
 
     @Override
     protected void onDestroy() {
@@ -299,6 +410,7 @@ public class AlbumActivity extends AppCompatActivity {
                 }
             });
         }
+        isShowProgress(false);
 
     }
 

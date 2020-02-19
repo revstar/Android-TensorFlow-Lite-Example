@@ -42,5 +42,8 @@ dependencies {
     implementation 'androidx.recyclerview:recyclerview:1.1.0'
     implementation project(path: ':toast')
     implementation project(path: ':dialog')
+    implementation 'com.tencent.bugly:crashreport_upgrade:1.4.2'
+    //其中latest.release指代最新版本号，也可以指定明确的版本号，例如1.2.0
+    implementation 'com.tencent.bugly:nativecrashreport:3.7.1'
 
 }

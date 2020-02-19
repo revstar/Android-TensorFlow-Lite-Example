@@ -10,19 +10,16 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Message;
-import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.content.ContextCompat;
-import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -33,11 +30,9 @@ import com.amitshekhar.tflite.adapter.PictureAdapter;
 import com.amitshekhar.tflite.model.MediaBean;
 import com.amitshekhar.tflite.model.TypePictureBean;
 import com.amitshekhar.tflite.progressdialog.MProgressBarDialog;
-import com.amitshekhar.tflite.utils.BitmapUtils;
 import com.amitshekhar.tflite.utils.DialogUtils;
 import com.amitshekhar.tflite.utils.DisplayUtils;
 import com.amitshekhar.tflite.utils.MyUtils;
-import com.revstar.dialog.ToastDialog;
 
 
 import java.io.File;
@@ -45,13 +40,10 @@ import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
 
 public class AlbumActivity extends AppCompatActivity {
 
-    private Executor executor = Executors.newSingleThreadExecutor();
-    private Classifier classifier;
+    private List<Classifier> classifierList;
     private static final String MODEL_PATH = "detect.tflite";
     private static final boolean QUANT = false;
     private static final String LABEL_PATH = "file:///android_asset/labels.txt";
@@ -59,12 +51,12 @@ public class AlbumActivity extends AppCompatActivity {
     private List<TypePictureBean> mTypePictureBeanList;
     private RecyclerView rvPicture;
 
-    Bitmap original;
     Bitmap bitmap;
     private DialogUtils mDialogUtils;
 
     private MProgressBarDialog mProgressBarDialog;
     private List<MediaBean> mediaBeen;
+    private int handleSize = 0;//处理数据大小
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -126,6 +118,7 @@ public class AlbumActivity extends AppCompatActivity {
                 .setHorizontalProgressBarHeight(10)
                 //dialog动画
                 .build();
+        mProgressBarDialog.showProgress(0, "正在加载模型...", true);
     }
 
     private void initView() {
@@ -142,7 +135,7 @@ public class AlbumActivity extends AppCompatActivity {
     private static class MyHandler extends Handler {
         private final WeakReference<AlbumActivity> mActivity;
 
-        public MyHandler(AlbumActivity activity) {
+        private MyHandler(AlbumActivity activity) {
             this.mActivity = new WeakReference<AlbumActivity>(activity);
         }
 
@@ -150,10 +143,12 @@ public class AlbumActivity extends AppCompatActivity {
         public void handleMessage(Message msg) {
             super.handleMessage(msg);
             AlbumActivity activity = mActivity.get();
-            if (activity != null&&activity.mediaBeen!=null) {
+            if (activity != null && activity.mediaBeen != null&&msg.what==0x123) {
+                int length = activity.mediaBeen.size();
                 if (activity.mProgressBarDialog != null) {
-                    activity.mProgressBarDialog.showProgress(100*msg.arg1/activity.mediaBeen.size(), (msg.arg1+1) + "/" + activity.mediaBeen.size(), true);
-                    if (msg.arg1+1 == activity.mediaBeen.size()) {
+                    ++activity.handleSize;
+                    activity.mProgressBarDialog.showProgress(100 * activity.handleSize / length, activity.handleSize + "/" + activity.mediaBeen.size(), true);
+                    if (activity.handleSize == length) {
                         activity.mProgressBarDialog.setTvImportState("完成");
                         activity.mHandler.postDelayed(new Runnable() {
                             @Override
@@ -161,6 +156,7 @@ public class AlbumActivity extends AppCompatActivity {
                                 activity.mProgressBarDialog.dismiss();
                                 activity.isShowProgress(false);
                                 activity.mHandler.removeCallbacksAndMessages(null);
+                                activity.setRvPicture();
                             }
                         }, 500);
                     }
@@ -169,29 +165,7 @@ public class AlbumActivity extends AppCompatActivity {
         }
     }
 
-
-
     private final MyHandler mHandler = new MyHandler(this);
-
-
-
-    /**
-     * @param isShow true 显示加载 fale 隐藏加载
-     */
-    public void isShowProgress(boolean isShow) {
-
-        if (isShow) {
-            if (mProgressBarDialog != null && !mProgressBarDialog.isShowing()) {
-                mProgressBarDialog.dismiss();
-            }
-        } else {
-            if (mProgressBarDialog != null && mProgressBarDialog.isShowing()) {
-                mProgressBarDialog.dismiss();
-
-            }
-        }
-    }
-
 
     private void getPermission() {
 
@@ -208,9 +182,9 @@ public class AlbumActivity extends AppCompatActivity {
             } else {
                 requestPermissions(permissionsList.toArray(new String[permissionsList.size()]), 1);
             }
-
+        } else {
+            getAllPhotoInfo();
         }
-
     }
 
     @Override
@@ -235,14 +209,8 @@ public class AlbumActivity extends AppCompatActivity {
         new Thread(new Runnable() {
             @Override
             public void run() {
-
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-//                        getDialogUtils().showDialog(DialogUtils.Type.LOADING, "正在导入中...", true);
-                    }
-                });
-                 mediaBeen = new ArrayList<>();
+                Log.d("开始读取照片", ">>>");
+                mediaBeen = new ArrayList<>();
                 HashMap<String, List<MediaBean>> allPhotosTemp = new HashMap<>();//所有照片
                 Uri mImageUri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
                 String[] projImage = {MediaStore.Images.Media._ID
@@ -268,7 +236,7 @@ public class AlbumActivity extends AppCompatActivity {
                         //存储对应关系
                         if (allPhotosTemp.containsKey(dirPath)) {
                             List<MediaBean> data = allPhotosTemp.get(dirPath);
-                            if (data!=null){
+                            if (data != null) {
                                 data.add(new MediaBean(path, size, displayName));
                             }
                             continue;
@@ -280,59 +248,83 @@ public class AlbumActivity extends AppCompatActivity {
                     }
                     mCursor.close();
                 }
-                queryType(mediaBeen);
-                //更新界面
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        //...
-                        setRvPicture();
+                if ((mediaBeen==null||mediaBeen.size()==0)||mProgressBarDialog!=null){
+                    mProgressBarDialog.dismiss();
                     }
-                });
+                int threadSize=(mediaBeen==null||mediaBeen.size()<10)?1:10;
+                handleImageList(mediaBeen, threadSize);
             }
         }).start();
     }
 
-    private void queryType(List<MediaBean> mediaBeanList) {
-        executor.execute(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    classifier = TFLiteObjectDetectionAPIModel.create(
-                            getAssets(),
-                            MODEL_PATH,
-                            LABEL_PATH,
-                            INPUT_SIZE,
-                            QUANT);
-                } catch (final Exception e) {
-                    isShowProgress(false);
-                    getDialogUtils().showDialog(DialogUtils.Type.ERROR, e.getMessage(), true);
-                    throw new RuntimeException("Error initializing TensorFlow!", e);
-                }
-            }
-        });
-        if (mediaBeanList != null) {
-            float lastTime= SystemClock.uptimeMillis();
-            for (int i=0;i<mediaBeanList.size();i++){
-                MediaBean item=mediaBeanList.get(i);
-                float currentTime=SystemClock.uptimeMillis();
-                Log.d("第"+i+"个",(currentTime-lastTime)+"毫秒");
-                lastTime=currentTime;
-                if (item != null && item.getLocalPath() != null) {
-                    getPictureType(item.getLocalPath());
-                }
-                Message message=mHandler.obtainMessage();
-                message.arg1=i;
-                mHandler.sendMessage(message);
-            }
+    /**
+     * 多线程处理list
+     *
+     * @param data      数据list
+     * @param threadNum 线程数
+     */
+    public synchronized void handleImageList(List<MediaBean> data, int threadNum) {
+        int length = data.size();
+        int tl = length % threadNum == 0 ? length / threadNum : (length
+                / threadNum + 1);
+
+        for (int i = 0; i < threadNum; i++) {
+            int end = (i + 1) * tl;
+            HandleThread thread = new HandleThread("线程[" + (i + 1) + "] ", data, i * tl, end > length ? length : end);
+            thread.start();
+        }
+    }
+
+    class HandleThread extends Thread {
+        private String threadName;
+        private List<MediaBean> data;
+        private int start;
+        private int end;
+
+        public HandleThread(String threadName, List<MediaBean> data, int start, int end) {
+            this.threadName = threadName;
+            this.data = data;
+            this.start = start;
+            this.end = end;
         }
 
+        public void run() {
+            Log.d("thread start", threadName);
+            final Classifier classifier;
+            try {
+                classifier = TFLiteObjectDetectionAPIModel.create(
+                        getAssets(),
+                        MODEL_PATH,
+                        LABEL_PATH,
+                        INPUT_SIZE,
+                        QUANT);
+                if (classifierList == null) {
+                    classifierList = new ArrayList<>();
+                }
+                classifierList.add(classifier);
+            } catch (final Exception e) {
+                isShowProgress(false);
+                getDialogUtils().showDialog(DialogUtils.Type.ERROR, e.getMessage(), true);
+                throw new RuntimeException("Error initializing TensorFlow!", e);
+            }
+            Log.d(threadName, "处理数据");
+
+            //这里处理数据
+            List<MediaBean> subList = data.subList(start, end);
+            for (int a = 0; a < subList.size(); a++) {
+                MediaBean item = subList.get(a);
+                getPictureType(item.getLocalPath(), classifier);
+                Message message = mHandler.obtainMessage();
+                message.what=0x123;
+                mHandler.sendMessage(message);
+                System.out.println(threadName + "处理了   " + subList.get(a) + "  ！");
+            }
+        }
 
     }
 
     private void setRvPicture() {
         if (rvPicture != null && mTypePictureBeanList != null) {
-//            getDialogUtils().showDialog(DialogUtils.Type.FINISH, "导入成功", true);
             removeEmptyPicture();
             rvPicture.setLayoutManager(new LinearLayoutManager(this));
             PictureAdapter adapter = new PictureAdapter(R.layout.picture_item, mTypePictureBeanList);
@@ -349,69 +341,55 @@ public class AlbumActivity extends AppCompatActivity {
         }
     }
 
-    private void getPictureType(String picturePath) {
-
-
+    private void getPictureType(String picturePath, Classifier classifier) {
         try {
-
-//        original = BitmapFactory.decodeFile(picturePath);
-//        if (original!=null){
             bitmap = Bitmap.createScaledBitmap(BitmapFactory.decodeFile(picturePath), INPUT_SIZE, INPUT_SIZE, false);
-
             if (bitmap != null && classifier != null) {
                 final List<Classifier.Recognition> results = classifier.recognizeImage(bitmap);
                 if (mTypePictureBeanList == null) {
                     mTypePictureBeanList = new ArrayList<>();
                 }
-
                 if (results != null && results.get(0) != null) {
-                    Classifier.Recognition item=results.get(0);
-                    if (item.getConfidence()>0.5){
+                    Classifier.Recognition item = results.get(0);
+                    if (item.getConfidence() > 0.7) {
                         String title = item.getTitle();
                         if (title != null) {
                             addPictureToList(title, picturePath);
                         }
                     }
-
                 }
             }
-//        }
-        }catch (Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
         }
-
     }
 
     private void addPictureToList(String title, String picturePath) {
-        try {
-            for (int i = 0; i < mTypePictureBeanList.size(); i++) {
-                if (mTypePictureBeanList.get(i).getType().equals(title)) {
-                    mTypePictureBeanList.get(i).getPicturePaths().add(picturePath);
-                }
+        for (int i = 0; i < mTypePictureBeanList.size(); i++) {
+            if (mTypePictureBeanList.get(i).getType().equals(title)) {
+                mTypePictureBeanList.get(i).getPicturePaths().add(picturePath);
             }
-
-        } catch (Exception e) {
-
-            isShowProgress(false);
-            getDialogUtils().showDialog(DialogUtils.Type.ERROR, e.getMessage(), true);
-            e.printStackTrace();
         }
-    }
 
+
+    }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (executor != null && classifier != null) {
-            executor.execute(new Runnable() {
-                @Override
-                public void run() {
-                    classifier.close();
-                }
-            });
-        }
+        closeClassifier();
         isShowProgress(false);
 
+    }
+
+    private void closeClassifier() {
+        if (classifierList != null) {
+            for (Classifier classifier : classifierList) {
+                if (classifier != null) {
+                    classifier.close();
+                }
+            }
+        }
     }
 
     public DialogUtils getDialogUtils() {
@@ -420,4 +398,21 @@ public class AlbumActivity extends AppCompatActivity {
         }
         return mDialogUtils;
     }
+
+    /**
+     * @param isShow true 显示加载 fale 隐藏加载
+     */
+    public void isShowProgress(boolean isShow) {
+
+        if (isShow) {
+            if (mProgressBarDialog != null && !mProgressBarDialog.isShowing()) {
+                mProgressBarDialog.dismiss();
+            }
+        } else {
+            if (mProgressBarDialog != null && mProgressBarDialog.isShowing()) {
+                mProgressBarDialog.dismiss();
+            }
+        }
+    }
+
 }

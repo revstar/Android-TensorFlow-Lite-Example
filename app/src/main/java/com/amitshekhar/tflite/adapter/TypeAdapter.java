@@ -29,6 +29,7 @@ public class TypeAdapter extends BaseQuickAdapter<String, BaseViewHolder> {
 
         Glide.with(getContext())
                 .load(s)
+                .override(300,300)
                 .fallback(R.color.picture_color_e)
                 .placeholder(R.color.picture_color_e)
                 .error(R.color.picture_color_e)

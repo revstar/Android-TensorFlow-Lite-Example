@@ -251,7 +251,7 @@ public class AlbumActivity extends AppCompatActivity {
                 if ((mediaBeen==null||mediaBeen.size()==0)&&mProgressBarDialog!=null){
                     mProgressBarDialog.dismiss();
                     }
-                int threadSize=(mediaBeen==null||mediaBeen.size()<10)?1:10;
+                int threadSize=(mediaBeen==null||mediaBeen.size()<10)?1:4;
                 handleImageList(mediaBeen, threadSize);
             }
         }).start();

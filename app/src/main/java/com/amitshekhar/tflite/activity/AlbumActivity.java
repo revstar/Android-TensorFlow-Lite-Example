@@ -248,7 +248,7 @@ public class AlbumActivity extends AppCompatActivity {
                     }
                     mCursor.close();
                 }
-                if ((mediaBeen==null||mediaBeen.size()==0)||mProgressBarDialog!=null){
+                if ((mediaBeen==null||mediaBeen.size()==0)&&mProgressBarDialog!=null){
                     mProgressBarDialog.dismiss();
                     }
                 int threadSize=(mediaBeen==null||mediaBeen.size()<10)?1:10;
@@ -345,13 +345,16 @@ public class AlbumActivity extends AppCompatActivity {
         try {
             bitmap = Bitmap.createScaledBitmap(BitmapFactory.decodeFile(picturePath), INPUT_SIZE, INPUT_SIZE, false);
             if (bitmap != null && classifier != null) {
+                long firstTime=System.currentTimeMillis();
                 final List<Classifier.Recognition> results = classifier.recognizeImage(bitmap);
+                long currentTime=System.currentTimeMillis();
+                Log.d("耗时------",(currentTime-firstTime)+"");
                 if (mTypePictureBeanList == null) {
                     mTypePictureBeanList = new ArrayList<>();
                 }
                 if (results != null && results.get(0) != null) {
                     Classifier.Recognition item = results.get(0);
-                    if (item.getConfidence() > 0.7) {
+                    if (item.getConfidence() > 0.6) {
                         String title = item.getTitle();
                         if (title != null) {
                             addPictureToList(title, picturePath);

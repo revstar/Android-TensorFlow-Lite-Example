@@ -9,6 +9,7 @@ import android.graphics.Paint;
 import android.graphics.RectF;
 import android.os.Bundle;
 import android.text.method.ScrollingMovementMethod;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
@@ -103,8 +104,10 @@ public class SelectActivity extends AppCompatActivity {
 
            imageViewResult.setImageBitmap(bitmap);
 
+           long lastTime=System.currentTimeMillis();
            final List<Classifier.Recognition> results = classifier.recognizeImage(bitmap);
-
+           long currentTime=System.currentTimeMillis();
+           Log.d("耗时------",(currentTime-lastTime)+"");
            if (results != null && results.get(0) != null) {
                textViewResult.setText(results.toString());
                RectF rectF = results.get(0).getLocation();
